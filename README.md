@@ -5,23 +5,23 @@
 
 ### *WARNING:* SHITTY CODE INSIDE THE FILE!!!
 
-The **SPUrm PS1 Audio Extractor** can convert an entire SPU RAM dump (containing audio samples) into individual ``.wav`` files, which are the samples.
+The **SPUrm PS1 Audio Extractor** can convert an entire SPU RAM dump (containing audio samples) or a .psf file into individual ``.wav`` files, which are the samples.
 \
-It only supports ``.bin`` (SPU RAM dump) files... *for now...*
 
-**Usage:** ``python spurm-extractor.py [inputfile.bin]``
+**Usage:** ``python spurm-extractor.py [inputfile]``
 
 ** **
 
 * **Requires...**
   - [**Python**](https://www.python.org/)
-  - A PS1 emulator that has a feature where it dumps the SPU's ram, like [**DuckStation**](https://duckstation.org/), or some other emulator that has that specifc feature.
+  - (Optional) A PS1 emulator that has a feature where it dumps the SPU's ram, like [**DuckStation**](https://duckstation.org/), or some other emulator that has that specifc feature.
 
 ** **
  
 * **Features to Add/Implement in Later...**
   - Option arguments, such as either wanting to export individual samples, or all of the samples in one ``.wav`` file.
-  - Maybe, add support for inputting in ``.psf`` files?
+
+Update (17-1-26): PSF support has been added!
 
 ** **
 
