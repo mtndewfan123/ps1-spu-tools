@@ -1,4 +1,4 @@
-import struct, sys
+import struct, sys, os, zlib
 
 # hello sorry for the shitty code yet again
 
@@ -48,6 +48,11 @@ def write_wav(p,s,r=22050,lstart=None,lend=None): # yes i had to program THIS wi
         f.write(struct.pack("<I",dsz))
         for i in s: f.write(struct.pack("<h",i))
 
+def trimzeros(d,t=8):
+    for i in range(len(d)):
+        if abs(d[i]) > t: return d[i:],i
+    return d,0
+
 def detectsampend(d,s=0):
     bad = 0
     blm = 8
@@ -69,13 +74,6 @@ def detectsampend(d,s=0):
             if bad >= blm: return i
         else: bad = 0
     return len(d)
-
-def lookslikeaudio(pcm):
-    if not pcm: return False
-    avg = sum(abs(x) for x in pcm)/len(pcm)
-    if avg > 20000: return False
-    if len(pcm) < 28*4: return False
-    return True
 
 def split(ind):
     samps = []
@@ -159,19 +157,85 @@ else:
     print(f"SPUrm PS1 Audio Extractor v0.1\n\nUsage: python {sys.argv[0]} [insert input file here!!!]")
     sys.exit(1)
 
-f = open(path,"rb")
-i = f.read()
+try: 
+    if path.lower().endswith('.bin') or path.lower().endswith('.psf'): f = open(path,"rb")
+    else:
+        print("INVALID: Not a .bin (PS1 SPU RAM dump) or a .psf (PlayStation Sound Format) file!")
+        sys.exit(1)
+except FileNotFoundError:
+    print("INVALID: File not found!")
+    sys.exit(1)
 
-end = detectsampend(i,4096)
-print(f"PS1 ADPCM Range: 0x{4096:X} – 0x{end:X}")
-smp = split(i[4096:end])
+if os.path.splitext(path)[1] == '.bin': # converts ram dumps to wav files
+    i = f.read()
+    end = detectsampend(i,4096)
+    smp = split(i[4096:end])
+elif os.path.splitext(path)[1] == '.psf': # converts psf files to wav files
+    f = open(path,"rb+")
+    if f.read(3) != b"PSF":
+        print("INVALID: PSF file header is incorrect!")
+        f.close()
+        sys.exit(1)
+    elif f.read(1) != b"\x01":
+        print("INVALID: PSF file is not a PS1-type file!")
+        f.close()
+        sys.exit(1)
+    elif b'[TAG]' not in f.read():
+        print("INVALID: PSF file lacks tags!")
+        f.close()
+        sys.exit(1)
+    f.seek(0)
+
+    # eliminates tag attributes at end
+    i = f.read()[16:]
+    f.close()
+    f = open(f"{path}_tempdecomp.bin",'wb+')
+    i = zlib.decompress(i.split(b'[TAG]')[0])
+    f.write(i)
+
+    if b"PS-X EXE\x00\x00\x00\x00\x00\x00\x00\x00" not in i:
+        print("INVALID: Decompressed PSF data header is incorrect!")
+        f.close()
+        sys.exit(1)
+    print("Successfully decompressed PSF data!")
+
+    if b"pBAV" not in i:
+        print("INVALID: Decompressed PSF data either lacks VAB sample data, or is invalid!")
+        f.close()
+        sys.exit(1)
+    f.seek(i.index(b"pBAV")+4)
+
+    print("===========================================")
+    print(f"VAB Version: {int.from_bytes(f.read(4),"little")}")
+    f.seek(f.tell()+8)
+    if f.read(2) != b'\xEE\xEE':
+        print("INVALID: VAB data may be invalid...")
+        f.close()
+        sys.exit(1)
+
+    nprog = int.from_bytes(f.read(2),"little") # num of programs - 1 (midi related)
+    ntons = int.from_bytes(f.read(2),"little")   # num of tones (max = 16 tones per program)
+    nvags = int.from_bytes(f.read(2),"little")-1 # num of programs (midi related)
+
+    print(f"# of VAGs/Samples: {nvags}") # haha VAGgot
+    f.seek(f.tell()+8+(0x800)+((nprog)*0x200)+0x200)
+    fst = f.tell()
+    f.close()
+    os.remove(f"{path}_tempdecomp.bin")
+
+    end = detectsampend(i,fst)
+    smp = split(i[fst:end])
 
 ox = 0
 for i,s in enumerate(smp):
     pcm,lstart,lend = decPSX(s)
-    if not lookslikeaudio(pcm):
-        print(f"Skipping garbage data {i}!")
-        continue
+
+    if os.path.splitext(path)[1] == '.psf':
+        pcm,trim = trimzeros(pcm)
+        if lstart is not None:
+            lstart = max(0, lstart-trim)
+        if lend is not None:
+            lend = max(0, lend-trim)
     write_wav(f"{path}_sample{ox}.wav",pcm,22050,lstart,lend)
     #with open(f"{path}_sample{i}.bin","wb") as o:
     #    for v in pcm:
